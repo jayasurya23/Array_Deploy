@@ -12,7 +12,7 @@ except Exception:  # plotly not installed
 
 # Set page configuration
 st.set_page_config(
-    page_title="Solar Pile Optimization Analysis",
+    page_title="Solar Pile Optimization Analysis V1.2",
     page_icon="☀️",
     layout="wide"
 )
@@ -1155,38 +1155,35 @@ if uploaded_file is not None:
                     export_df = export_df[reordered_columns(export_df)]
                     # ================= End Row-to-Row Drop Calculations =================
 
-                    # ================= Best Method & Total Grading (when N-S unchecked) =================
+                    # ================= Best Method & Ground Adjustment (when N-S unchecked) =================
                     if not apply_ns_constraints:
                         # Initialize columns
                         export_df['Best_Method'] = ''
-                        export_df['Total_Grading'] = np.nan
+                        export_df['Best_Method_Adjustment'] = np.nan
                         
                         # Calculate total grading for each row and each method
                         for row_name, grp in export_df.groupby('Row'):
-                            row_ground_points = process_row_data(grp)
-                            
-                            # Calculate grading volume for each method
+                            # Calculate total ground adjustment (absolute sum) for each method
                             method_grading = {}
                             for method in ['Simple LOBF', 'Refined LOBF', 'Dynamic Fixed']:
                                 ground_adj_col = f'Ground Adj ({method})'
                                 if ground_adj_col in grp.columns:
                                     ground_adjustments = grp[ground_adj_col].values
-                                    cut_vol, fill_vol = calculate_earthwork_volume(
-                                        row_ground_points, ground_adjustments, grading_width_ft
-                                    )
-                                    total_grading = cut_vol + fill_vol
+                                    total_grading = np.sum(np.abs(ground_adjustments))
                                     method_grading[method] = total_grading
                             
                             # Find best method (minimum total grading)
                             if method_grading:
                                 best_method = min(method_grading.items(), key=lambda x: x[1])
                                 best_method_name = best_method[0]
-                                best_grading_value = best_method[1]
                                 
-                                # Assign to all piles in this row
+                                # Get the ground adjustment column for the best method
+                                best_ground_adj_col = f'Ground Adj ({best_method_name})'
+                                
+                                # Assign best method name and its ground adjustment values to all piles in this row
                                 export_df.loc[grp.index, 'Best_Method'] = best_method_name
-                                export_df.loc[grp.index, 'Total_Grading'] = best_grading_value
-                    # ================= End Best Method & Total Grading =================
+                                export_df.loc[grp.index, 'Best_Method_Adjustment'] = grp[best_ground_adj_col].values
+                    # ================= End Best Method & Ground Adjustment =================
 
                     # Round numerical columns
                     numerical_cols = [col for col in export_df.columns 
