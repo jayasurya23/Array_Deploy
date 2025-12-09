@@ -1155,6 +1155,39 @@ if uploaded_file is not None:
                     export_df = export_df[reordered_columns(export_df)]
                     # ================= End Row-to-Row Drop Calculations =================
 
+                    # ================= Best Method & Total Grading (when N-S unchecked) =================
+                    if not apply_ns_constraints:
+                        # Initialize columns
+                        export_df['Best_Method'] = ''
+                        export_df['Total_Grading'] = np.nan
+                        
+                        # Calculate total grading for each row and each method
+                        for row_name, grp in export_df.groupby('Row'):
+                            row_ground_points = process_row_data(grp)
+                            
+                            # Calculate grading volume for each method
+                            method_grading = {}
+                            for method in ['Simple LOBF', 'Refined LOBF', 'Dynamic Fixed']:
+                                ground_adj_col = f'Ground Adj ({method})'
+                                if ground_adj_col in grp.columns:
+                                    ground_adjustments = grp[ground_adj_col].values
+                                    cut_vol, fill_vol = calculate_earthwork_volume(
+                                        row_ground_points, ground_adjustments, grading_width_ft
+                                    )
+                                    total_grading = cut_vol + fill_vol
+                                    method_grading[method] = total_grading
+                            
+                            # Find best method (minimum total grading)
+                            if method_grading:
+                                best_method = min(method_grading.items(), key=lambda x: x[1])
+                                best_method_name = best_method[0]
+                                best_grading_value = best_method[1]
+                                
+                                # Assign to all piles in this row
+                                export_df.loc[grp.index, 'Best_Method'] = best_method_name
+                                export_df.loc[grp.index, 'Total_Grading'] = best_grading_value
+                    # ================= End Best Method & Total Grading =================
+
                     # Round numerical columns
                     numerical_cols = [col for col in export_df.columns 
                                      if export_df[col].dtype in ['float64', 'int64'] and col not in ['Pile', 'Point Number']]
@@ -1259,4 +1292,4 @@ else:
 
 # Footer
 st.markdown("---")
-st.markdown("*Solar Pile Optimization Analysis Tool - Version 1.0*")
+st.markdown("*Solar Pile Optimization Analysis Tool - Version 1.2*")
