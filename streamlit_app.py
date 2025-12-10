@@ -1232,10 +1232,11 @@ if uploaded_file is not None:
                     )
 
                 with col2:
-                    # Cut/Fill CSV - Use Point Number if available, otherwise Pile
-                    if 'Ground Adj (N-S Constrained)' in final_results_df.columns:
-                        point_number_col = 'Point Number' if 'Point Number' in final_results_df.columns else 'Pile'
-
+                    # Cut/Fill CSV - Available for both N-S constrained and unconstrained
+                    point_number_col = 'Point Number' if 'Point Number' in final_results_df.columns else 'Pile'
+                    
+                    if apply_ns_constraints and 'Ground Adj (N-S Constrained)' in final_results_df.columns:
+                        # N-S Constrained version
                         cut_fill_df = pd.DataFrame({
                             'Point number': final_results_df[point_number_col],
                             'Northing': final_results_df['Northing'].round(2),
@@ -1243,19 +1244,37 @@ if uploaded_file is not None:
                             'Ground Adj (N-S Constrained)': final_results_df['Ground Adj (N-S Constrained)'].round(2),
                             'Grading Direction (N-S Constrained)': final_results_df['Grading Direction (N-S Constrained)']
                         })
-
-                        st.download_button(
-                            label="📥 Download Cut_Fill.csv",
-                            data=cut_fill_df.to_csv(index=False),
-                            file_name="Cut_Fill.csv",
-                            mime="text/csv"
+                    else:
+                        # Best Method version (when N-S unchecked)
+                        # Add grading direction for best method
+                        grading_direction = np.select(
+                            [export_df['Best_Ground_Adj'] > 0.001, export_df['Best_Ground_Adj'] < -0.001],
+                            ['Fill', 'Cut'],
+                            default='None'
                         )
+                        
+                        cut_fill_df = pd.DataFrame({
+                            'Point number': export_df[point_number_col],
+                            'Northing': export_df['Northing'].round(2),
+                            'Easting': export_df['Easting'].round(2),
+                            'Best_Method': export_df['Best_Method'],
+                            'Ground Adj (Best Method)': export_df['Best_Ground_Adj'].round(2),
+                            'Grading Direction (Best Method)': grading_direction
+                        })
+
+                    st.download_button(
+                        label="📥 Download Cut_Fill.csv",
+                        data=cut_fill_df.to_csv(index=False),
+                        file_name="Cut_Fill.csv",
+                        mime="text/csv"
+                    )
 
                 with col3:
-                    # FG Surface CSV - Use Point Number if available, otherwise Pile
-                    if 'Finished Ground (N-S Constrained)' in final_results_df.columns:
-                        point_number_col = 'Point Number' if 'Point Number' in final_results_df.columns else 'Pile'
-
+                    # FG Surface CSV - Available for both N-S constrained and unconstrained
+                    point_number_col = 'Point Number' if 'Point Number' in final_results_df.columns else 'Pile'
+                    
+                    if apply_ns_constraints and 'Finished Ground (N-S Constrained)' in final_results_df.columns:
+                        # N-S Constrained version
                         fg_surface_df = pd.DataFrame({
                             'Point Number': final_results_df[point_number_col],
                             'Northing': final_results_df['Northing'].round(2),
@@ -1263,13 +1282,29 @@ if uploaded_file is not None:
                             'Finished Ground (N-S Constrained)': final_results_df['Finished Ground (N-S Constrained)'].round(2),
                             'Grading Direction (N-S Constrained)': final_results_df['Grading Direction (N-S Constrained)']
                         })
-
-                        st.download_button(
-                            label="📥 Download FG_Surface.csv",
-                            data=fg_surface_df.to_csv(index=False),
-                            file_name="FG_Surface.csv",
-                            mime="text/csv"
+                    else:
+                        # Best Method version (when N-S unchecked)
+                        grading_direction = np.select(
+                            [export_df['Best_Ground_Adj'] > 0.001, export_df['Best_Ground_Adj'] < -0.001],
+                            ['Fill', 'Cut'],
+                            default='None'
                         )
+                        
+                        fg_surface_df = pd.DataFrame({
+                            'Point Number': export_df[point_number_col],
+                            'Northing': export_df['Northing'].round(2),
+                            'Easting': export_df['Easting'].round(2),
+                            'Best_Method': export_df['Best_Method'],
+                            'Finished Ground (Best Method)': export_df['Best_Finished_Ground'].round(2),
+                            'Grading Direction (Best Method)': grading_direction
+                        })
+
+                    st.download_button(
+                        label="📥 Download FG_Surface.csv",
+                        data=fg_surface_df.to_csv(index=False),
+                        file_name="FG_Surface.csv",
+                        mime="text/csv"
+                    )
 
 else:
     st.info("👈 Please upload an Excel file to begin the analysis")
