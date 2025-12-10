@@ -1155,11 +1155,14 @@ if uploaded_file is not None:
                     export_df = export_df[reordered_columns(export_df)]
                     # ================= End Row-to-Row Drop Calculations =================
 
-                    # ================= Best Method & Ground Adjustment (when N-S unchecked) =================
+                    # ================= Best Method & All Columns (when N-S unchecked) =================
                     if not apply_ns_constraints:
                         # Initialize columns
                         export_df['Best_Method'] = ''
-                        export_df['Best_Method_Adjustment'] = np.nan
+                        export_df['Best_Top_of_Pile'] = np.nan
+                        export_df['Best_Ground_Adj'] = np.nan
+                        export_df['Best_Final_Reveal'] = np.nan
+                        export_df['Best_Finished_Ground'] = np.nan
                         
                         # Calculate total grading for each row and each method
                         for row_name, grp in export_df.groupby('Row'):
@@ -1177,13 +1180,27 @@ if uploaded_file is not None:
                                 best_method = min(method_grading.items(), key=lambda x: x[1])
                                 best_method_name = best_method[0]
                                 
-                                # Get the ground adjustment column for the best method
+                                # Get all column names for the best method
+                                best_top_col = f'Top of Pile ({best_method_name})'
                                 best_ground_adj_col = f'Ground Adj ({best_method_name})'
+                                best_reveal_col = f'Final Reveal ({best_method_name})'
+                                best_fg_col = f'Finished Ground ({best_method_name})'
                                 
-                                # Assign best method name and its ground adjustment values to all piles in this row
+                                # Assign best method name and all its values to this row
                                 export_df.loc[grp.index, 'Best_Method'] = best_method_name
-                                export_df.loc[grp.index, 'Best_Method_Adjustment'] = grp[best_ground_adj_col].values
-                    # ================= End Best Method & Ground Adjustment =================
+                                
+                                if best_top_col in grp.columns:
+                                    export_df.loc[grp.index, 'Best_Top_of_Pile'] = grp[best_top_col].values
+                                
+                                if best_ground_adj_col in grp.columns:
+                                    export_df.loc[grp.index, 'Best_Ground_Adj'] = grp[best_ground_adj_col].values
+                                
+                                if best_reveal_col in grp.columns:
+                                    export_df.loc[grp.index, 'Best_Final_Reveal'] = grp[best_reveal_col].values
+                                
+                                if best_fg_col in grp.columns:
+                                    export_df.loc[grp.index, 'Best_Finished_Ground'] = grp[best_fg_col].values
+                    # ================= End Best Method & All Columns =================
 
                     # Round numerical columns
                     numerical_cols = [col for col in export_df.columns 
