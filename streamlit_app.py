@@ -983,6 +983,7 @@ if uploaded_file is not None:
                 # Store results in session state
                 st.session_state['final_results_df'] = final_results_df
                 st.session_state['optimal_method'] = optimal_method
+                st.session_state['apply_ns_constraints'] = apply_ns_constraints
 
                 # Interactive visualization section (only in test mode)
                 if test_mode:
@@ -1044,267 +1045,272 @@ if uploaded_file is not None:
                 st.subheader("📋 Results Preview")
                 st.dataframe(final_results_df.head(20), use_container_width=True)
 
-                # Download buttons
-                st.subheader("💾 Download Results")
+    # Download buttons section - moved outside run_clicked to persist after rerun
+    if 'final_results_df' in st.session_state and st.session_state['final_results_df'] is not None:
+        final_results_df = st.session_state['final_results_df']
+        apply_ns_constraints = st.session_state.get('apply_ns_constraints', True)
+        
+        # Download buttons
+        st.subheader("💾 Download Results")
 
-                col1, col2, col3 = st.columns(3)
+        col1, col2, col3 = st.columns(3)
 
-                with col1:
-                    # Excel export - Keep all columns like original script
-                    output = io.BytesIO()
+        with col1:
+            # Excel export - Keep all columns like original script
+            output = io.BytesIO()
 
-                    # Prepare export dataframe with all columns
-                    base_columns = ['Row', 'Pile', 'Easting', 'Northing', 'EG']
+            # Prepare export dataframe with all columns
+            base_columns = ['Row', 'Pile', 'Easting', 'Northing', 'EG']
 
-                    # Add Point Number if it exists
-                    if 'Point Number' in final_results_df.columns:
-                        base_columns.insert(0, 'Point Number')
+            # Add Point Number if it exists
+            if 'Point Number' in final_results_df.columns:
+                base_columns.insert(0, 'Point Number')
 
-                    calc_columns = [
-                        'Top of Pile (Simple LOBF)', 'Ground Adj (Simple LOBF)', 'Final Reveal (Simple LOBF)', 'Finished Ground (Simple LOBF)',
-                        'Top of Pile (Refined LOBF)', 'Ground Adj (Refined LOBF)', 'Final Reveal (Refined LOBF)', 'Finished Ground (Refined LOBF)',
-                        'Top of Pile (Dynamic Fixed)', 'Ground Adj (Dynamic Fixed)', 'Final Reveal (Dynamic Fixed)', 'Finished Ground (Dynamic Fixed)',
-                    ]
+            calc_columns = [
+                'Top of Pile (Simple LOBF)', 'Ground Adj (Simple LOBF)', 'Final Reveal (Simple LOBF)', 'Finished Ground (Simple LOBF)',
+                'Top of Pile (Refined LOBF)', 'Ground Adj (Refined LOBF)', 'Final Reveal (Refined LOBF)', 'Finished Ground (Refined LOBF)',
+                'Top of Pile (Dynamic Fixed)', 'Ground Adj (Dynamic Fixed)', 'Final Reveal (Dynamic Fixed)', 'Finished Ground (Dynamic Fixed)',
+            ]
 
-                    if apply_ns_constraints:
-                        calc_columns.extend([
-                            'Top of Pile (N-S Constrained)', 'Ground Adj (N-S Constrained)', 
-                            'Final Reveal (N-S Constrained)', 'Finished Ground (N-S Constrained)',
-                            'Grading Direction (N-S Constrained)', 'Adjacent Row to North', 'Adjacent Row to South'
-                        ])
+            if apply_ns_constraints:
+                calc_columns.extend([
+                    'Top of Pile (N-S Constrained)', 'Ground Adj (N-S Constrained)', 
+                    'Final Reveal (N-S Constrained)', 'Finished Ground (N-S Constrained)',
+                    'Grading Direction (N-S Constrained)', 'Adjacent Row to North', 'Adjacent Row to South'
+                ])
 
-                    # Remove EastingGroup if present
-                    if 'EastingGroup' in final_results_df.columns:
-                        final_results_df_export = final_results_df.drop('EastingGroup', axis=1)
-                    else:
-                        final_results_df_export = final_results_df.copy()
+            # Remove EastingGroup if present
+            if 'EastingGroup' in final_results_df.columns:
+                final_results_df_export = final_results_df.drop('EastingGroup', axis=1)
+            else:
+                final_results_df_export = final_results_df.copy()
 
-                    # Select only existing columns
-                    export_columns = [col for col in base_columns + calc_columns if col in final_results_df_export.columns]
-                    export_df = final_results_df_export[export_columns].copy()
+            # Select only existing columns
+            export_columns = [col for col in base_columns + calc_columns if col in final_results_df_export.columns]
+            export_df = final_results_df_export[export_columns].copy()
 
-                    # ================= Row-to-Row Drop Calculations =================
-                    # Definition: For each Row & method, Row Drop = last pile top - first pile top (signed)
-                    # Also compute Row Slope (%) = (Row Drop / horizontal length)*100
-                    method_top_cols = {
-                        'Simple LOBF': 'Top of Pile (Simple LOBF)',
-                        'Refined LOBF': 'Top of Pile (Refined LOBF)',
-                        'Dynamic Fixed': 'Top of Pile (Dynamic Fixed)'
-                    }
-                    if apply_ns_constraints and 'Top of Pile (N-S Constrained)' in export_df.columns:
-                        method_top_cols['N-S Constrained'] = 'Top of Pile (N-S Constrained)'
+            # ================= Row-to-Row Drop Calculations =================
+            # Definition: For each Row & method, Row Drop = last pile top - first pile top (signed)
+            # Also compute Row Slope (%) = (Row Drop / horizontal length)*100
+            method_top_cols = {
+                'Simple LOBF': 'Top of Pile (Simple LOBF)',
+                'Refined LOBF': 'Top of Pile (Refined LOBF)',
+                'Dynamic Fixed': 'Top of Pile (Dynamic Fixed)'
+            }
+            if apply_ns_constraints and 'Top of Pile (N-S Constrained)' in export_df.columns:
+                method_top_cols['N-S Constrained'] = 'Top of Pile (N-S Constrained)'
 
-                    # Initialize columns (will reposition later)
-                    for method_name in method_top_cols.keys():
-                        export_df[f'Row Drop ({method_name})'] = np.nan
-                        export_df[f'Row Slope (%) ({method_name})'] = np.nan
+            # Initialize columns (will reposition later)
+            for method_name in method_top_cols.keys():
+                export_df[f'Row Drop ({method_name})'] = np.nan
+                export_df[f'Row Slope (%) ({method_name})'] = np.nan
 
-                    drop_summary_records = []
+            drop_summary_records = []
 
-                    for row_name, grp in export_df.groupby('Row'):
-                        # Distance ordering
-                        if {'Easting', 'Northing'}.issubset(grp.columns):
-                            coords = grp[['Easting', 'Northing']].values
-                            dists = np.insert(np.cumsum(np.sqrt(np.sum(np.diff(coords, axis=0)**2, axis=1))), 0, 0)
-                            order_idx = np.argsort(dists)
-                            ordered_index = grp.index[order_idx]
-                            horizontal_len = dists[order_idx[-1]] - dists[order_idx[0]] if len(dists) > 1 else 0
-                        else:
-                            ordered_index = grp.index
-                            horizontal_len = len(grp) - 1 if len(grp) > 1 else 0
+            for row_name, grp in export_df.groupby('Row'):
+                # Distance ordering
+                if {'Easting', 'Northing'}.issubset(grp.columns):
+                    coords = grp[['Easting', 'Northing']].values
+                    dists = np.insert(np.cumsum(np.sqrt(np.sum(np.diff(coords, axis=0)**2, axis=1))), 0, 0)
+                    order_idx = np.argsort(dists)
+                    ordered_index = grp.index[order_idx]
+                    horizontal_len = dists[order_idx[-1]] - dists[order_idx[0]] if len(dists) > 1 else 0
+                else:
+                    ordered_index = grp.index
+                    horizontal_len = len(grp) - 1 if len(grp) > 1 else 0
 
-                        record = {'Row': row_name, 'Horizontal Length (ft)': horizontal_len}
+                record = {'Row': row_name, 'Horizontal Length (ft)': horizontal_len}
 
-                        for method_name, top_col in method_top_cols.items():
-                            if top_col not in grp.columns:
-                                continue
-                            first_top = grp.loc[ordered_index[0], top_col]
-                            last_top = grp.loc[ordered_index[-1], top_col]
-                            row_drop = last_top - first_top
-                            slope_pct = (row_drop / horizontal_len * 100) if horizontal_len else 0.0
-                            drop_col = f'Row Drop ({method_name})'
-                            slope_col = f'Row Slope (%) ({method_name})'
-                            export_df.loc[grp.index, drop_col] = row_drop
-                            export_df.loc[grp.index, slope_col] = slope_pct
-                            record[drop_col] = row_drop
-                            record[slope_col] = slope_pct
-                        drop_summary_records.append(record)
+                for method_name, top_col in method_top_cols.items():
+                    if top_col not in grp.columns:
+                        continue
+                    first_top = grp.loc[ordered_index[0], top_col]
+                    last_top = grp.loc[ordered_index[-1], top_col]
+                    row_drop = last_top - first_top
+                    slope_pct = (row_drop / horizontal_len * 100) if horizontal_len else 0.0
+                    drop_col = f'Row Drop ({method_name})'
+                    slope_col = f'Row Slope (%) ({method_name})'
+                    export_df.loc[grp.index, drop_col] = row_drop
+                    export_df.loc[grp.index, slope_col] = slope_pct
+                    record[drop_col] = row_drop
+                    record[slope_col] = slope_pct
+                drop_summary_records.append(record)
 
-                    row_drop_summary_df = pd.DataFrame(drop_summary_records).sort_values('Row')
+            row_drop_summary_df = pd.DataFrame(drop_summary_records).sort_values('Row')
 
-                    # Reorder columns to place drop & slope right after each Top of Pile column
-                    def reordered_columns(df: pd.DataFrame):
-                        base_set = set(base_columns)
-                        method_order = ['Simple LOBF', 'Refined LOBF', 'Dynamic Fixed']
-                        if apply_ns_constraints and 'Top of Pile (N-S Constrained)' in df.columns:
-                            method_order.append('N-S Constrained')
-                        method_column_groups = []
-                        for m in method_order:
-                            top_c = f'Top of Pile ({m})'
-                            drop_c = f'Row Drop ({m})'
-                            slope_c = f'Row Slope (%) ({m})'
-                            ga_c = f'Ground Adj ({m})'
-                            fr_c = f'Final Reveal ({m})'
-                            fg_c = f'Finished Ground ({m})'
-                            group = [c for c in [top_c, drop_c, slope_c, ga_c, fr_c, fg_c] if c in df.columns]
-                            method_column_groups.extend(group)
-                        ordered = [c for c in base_columns if c in df.columns] + method_column_groups
-                        # Append any remaining columns not yet included
-                        remaining = [c for c in df.columns if c not in ordered]
-                        return ordered + remaining
+            # Reorder columns to place drop & slope right after each Top of Pile column
+            def reordered_columns(df: pd.DataFrame):
+                base_set = set(base_columns)
+                method_order = ['Simple LOBF', 'Refined LOBF', 'Dynamic Fixed']
+                if apply_ns_constraints and 'Top of Pile (N-S Constrained)' in df.columns:
+                    method_order.append('N-S Constrained')
+                method_column_groups = []
+                for m in method_order:
+                    top_c = f'Top of Pile ({m})'
+                    drop_c = f'Row Drop ({m})'
+                    slope_c = f'Row Slope (%) ({m})'
+                    ga_c = f'Ground Adj ({m})'
+                    fr_c = f'Final Reveal ({m})'
+                    fg_c = f'Finished Ground ({m})'
+                    group = [c for c in [top_c, drop_c, slope_c, ga_c, fr_c, fg_c] if c in df.columns]
+                    method_column_groups.extend(group)
+                ordered = [c for c in base_columns if c in df.columns] + method_column_groups
+                # Append any remaining columns not yet included
+                remaining = [c for c in df.columns if c not in ordered]
+                return ordered + remaining
 
-                    export_df = export_df[reordered_columns(export_df)]
-                    # ================= End Row-to-Row Drop Calculations =================
+            export_df = export_df[reordered_columns(export_df)]
+            # ================= End Row-to-Row Drop Calculations =================
 
-                    # ================= Best Method & All Columns (when N-S unchecked) =================
-                    if not apply_ns_constraints:
-                        # Initialize columns
-                        export_df['Best_Method'] = ''
-                        export_df['Best_Top_of_Pile'] = np.nan
-                        export_df['Best_Ground_Adj'] = np.nan
-                        export_df['Best_Final_Reveal'] = np.nan
-                        export_df['Best_Finished_Ground'] = np.nan
-                        
-                        # Calculate total grading for each row and each method
-                        for row_name, grp in export_df.groupby('Row'):
-                            # Calculate total ground adjustment (absolute sum) for each method
-                            method_grading = {}
-                            for method in ['Simple LOBF', 'Refined LOBF', 'Dynamic Fixed']:
-                                ground_adj_col = f'Ground Adj ({method})'
-                                if ground_adj_col in grp.columns:
-                                    ground_adjustments = grp[ground_adj_col].values
-                                    total_grading = np.sum(np.abs(ground_adjustments))
-                                    method_grading[method] = total_grading
-                            
-                            # Find best method (minimum total grading)
-                            if method_grading:
-                                best_method = min(method_grading.items(), key=lambda x: x[1])
-                                best_method_name = best_method[0]
-                                
-                                # Get all column names for the best method
-                                best_top_col = f'Top of Pile ({best_method_name})'
-                                best_ground_adj_col = f'Ground Adj ({best_method_name})'
-                                best_reveal_col = f'Final Reveal ({best_method_name})'
-                                best_fg_col = f'Finished Ground ({best_method_name})'
-                                
-                                # Assign best method name and all its values to this row
-                                export_df.loc[grp.index, 'Best_Method'] = best_method_name
-                                
-                                if best_top_col in grp.columns:
-                                    export_df.loc[grp.index, 'Best_Top_of_Pile'] = grp[best_top_col].values
-                                
-                                if best_ground_adj_col in grp.columns:
-                                    export_df.loc[grp.index, 'Best_Ground_Adj'] = grp[best_ground_adj_col].values
-                                
-                                if best_reveal_col in grp.columns:
-                                    export_df.loc[grp.index, 'Best_Final_Reveal'] = grp[best_reveal_col].values
-                                
-                                if best_fg_col in grp.columns:
-                                    export_df.loc[grp.index, 'Best_Finished_Ground'] = grp[best_fg_col].values
-                    # ================= End Best Method & All Columns =================
-
-                    # Round numerical columns
-                    numerical_cols = [col for col in export_df.columns 
-                                     if export_df[col].dtype in ['float64', 'int64'] and col not in ['Pile', 'Point Number']]
-                    export_df[numerical_cols] = export_df[numerical_cols].round(2)
-
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        # Round selected numeric metric columns for readability (after reordering)
-                        for col in export_df.columns:
-                            if export_df[col].dtype in [float, int]:
-                                export_df[col] = export_df[col].round(4) if 'Slope' in col else export_df[col].round(2)
-                        export_df.to_excel(writer, sheet_name='Optimization Results', index=False)
-                        # Row Drops summary sheet (signed drop + slope only)
-                        if not row_drop_summary_df.empty:
-                            # Round for summary
-                            summary_df_out = row_drop_summary_df.copy()
-                            for col in summary_df_out.columns:
-                                if summary_df_out[col].dtype in [float, int]:
-                                    summary_df_out[col] = summary_df_out[col].round(4) if 'Slope' in col else summary_df_out[col].round(2)
-                            summary_df_out.to_excel(writer, sheet_name='Row Drops', index=False)
-                    output.seek(0)
-
-                    st.download_button(
-                        label="📥 Download Excel Results",
-                        data=output,
-                        file_name="optimization_results_comparison.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-
-                with col2:
-                    # Cut/Fill CSV - Available for both N-S constrained and unconstrained
-                    point_number_col = 'Point Number' if 'Point Number' in final_results_df.columns else 'Pile'
+            # ================= Best Method & All Columns (when N-S unchecked) =================
+            if not apply_ns_constraints:
+                # Initialize columns
+                export_df['Best_Method'] = ''
+                export_df['Best_Top_of_Pile'] = np.nan
+                export_df['Best_Ground_Adj'] = np.nan
+                export_df['Best_Final_Reveal'] = np.nan
+                export_df['Best_Finished_Ground'] = np.nan
+                
+                # Calculate total grading for each row and each method
+                for row_name, grp in export_df.groupby('Row'):
+                    # Calculate total ground adjustment (absolute sum) for each method
+                    method_grading = {}
+                    for method in ['Simple LOBF', 'Refined LOBF', 'Dynamic Fixed']:
+                        ground_adj_col = f'Ground Adj ({method})'
+                        if ground_adj_col in grp.columns:
+                            ground_adjustments = grp[ground_adj_col].values
+                            total_grading = np.sum(np.abs(ground_adjustments))
+                            method_grading[method] = total_grading
                     
-                    if apply_ns_constraints and 'Ground Adj (N-S Constrained)' in final_results_df.columns:
-                        # N-S Constrained version
-                        cut_fill_df = pd.DataFrame({
-                            'Point number': final_results_df[point_number_col],
-                            'Northing': final_results_df['Northing'].round(2),
-                            'Easting': final_results_df['Easting'].round(2),
-                            'Ground Adj (N-S Constrained)': final_results_df['Ground Adj (N-S Constrained)'].round(2),
-                            'Grading Direction (N-S Constrained)': final_results_df['Grading Direction (N-S Constrained)']
-                        })
-                    else:
-                        # Best Method version (when N-S unchecked)
-                        # Add grading direction for best method
-                        grading_direction = np.select(
-                            [export_df['Best_Ground_Adj'] > 0.001, export_df['Best_Ground_Adj'] < -0.001],
-                            ['Fill', 'Cut'],
-                            default='None'
-                        )
+                    # Find best method (minimum total grading)
+                    if method_grading:
+                        best_method = min(method_grading.items(), key=lambda x: x[1])
+                        best_method_name = best_method[0]
                         
-                        cut_fill_df = pd.DataFrame({
-                            'Point number': export_df[point_number_col],
-                            'Northing': export_df['Northing'].round(2),
-                            'Easting': export_df['Easting'].round(2),
-                            'Best_Method': export_df['Best_Method'],
-                            'Ground Adj (Best Method)': export_df['Best_Ground_Adj'].round(2),
-                            'Grading Direction (Best Method)': grading_direction
-                        })
-
-                    st.download_button(
-                        label="📥 Download Cut_Fill.csv",
-                        data=cut_fill_df.to_csv(index=False),
-                        file_name="Cut_Fill.csv",
-                        mime="text/csv"
-                    )
-
-                with col3:
-                    # FG Surface CSV - Available for both N-S constrained and unconstrained
-                    point_number_col = 'Point Number' if 'Point Number' in final_results_df.columns else 'Pile'
-                    
-                    if apply_ns_constraints and 'Finished Ground (N-S Constrained)' in final_results_df.columns:
-                        # N-S Constrained version
-                        fg_surface_df = pd.DataFrame({
-                            'Point Number': final_results_df[point_number_col],
-                            'Northing': final_results_df['Northing'].round(2),
-                            'Easting': final_results_df['Easting'].round(2),
-                            'Finished Ground (N-S Constrained)': final_results_df['Finished Ground (N-S Constrained)'].round(2),
-                            'Grading Direction (N-S Constrained)': final_results_df['Grading Direction (N-S Constrained)']
-                        })
-                    else:
-                        # Best Method version (when N-S unchecked)
-                        grading_direction = np.select(
-                            [export_df['Best_Ground_Adj'] > 0.001, export_df['Best_Ground_Adj'] < -0.001],
-                            ['Fill', 'Cut'],
-                            default='None'
-                        )
+                        # Get all column names for the best method
+                        best_top_col = f'Top of Pile ({best_method_name})'
+                        best_ground_adj_col = f'Ground Adj ({best_method_name})'
+                        best_reveal_col = f'Final Reveal ({best_method_name})'
+                        best_fg_col = f'Finished Ground ({best_method_name})'
                         
-                        fg_surface_df = pd.DataFrame({
-                            'Point Number': export_df[point_number_col],
-                            'Northing': export_df['Northing'].round(2),
-                            'Easting': export_df['Easting'].round(2),
-                            'Best_Method': export_df['Best_Method'],
-                            'Finished Ground (Best Method)': export_df['Best_Finished_Ground'].round(2),
-                            'Grading Direction (Best Method)': grading_direction
-                        })
+                        # Assign best method name and all its values to this row
+                        export_df.loc[grp.index, 'Best_Method'] = best_method_name
+                        
+                        if best_top_col in grp.columns:
+                            export_df.loc[grp.index, 'Best_Top_of_Pile'] = grp[best_top_col].values
+                        
+                        if best_ground_adj_col in grp.columns:
+                            export_df.loc[grp.index, 'Best_Ground_Adj'] = grp[best_ground_adj_col].values
+                        
+                        if best_reveal_col in grp.columns:
+                            export_df.loc[grp.index, 'Best_Final_Reveal'] = grp[best_reveal_col].values
+                        
+                        if best_fg_col in grp.columns:
+                            export_df.loc[grp.index, 'Best_Finished_Ground'] = grp[best_fg_col].values
+            # ================= End Best Method & All Columns =================
 
-                    st.download_button(
-                        label="📥 Download FG_Surface.csv",
-                        data=fg_surface_df.to_csv(index=False),
-                        file_name="FG_Surface.csv",
-                        mime="text/csv"
-                    )
+            # Round numerical columns
+            numerical_cols = [col for col in export_df.columns 
+                             if export_df[col].dtype in ['float64', 'int64'] and col not in ['Pile', 'Point Number']]
+            export_df[numerical_cols] = export_df[numerical_cols].round(2)
+
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                # Round selected numeric metric columns for readability (after reordering)
+                for col in export_df.columns:
+                    if export_df[col].dtype in [float, int]:
+                        export_df[col] = export_df[col].round(4) if 'Slope' in col else export_df[col].round(2)
+                export_df.to_excel(writer, sheet_name='Optimization Results', index=False)
+                # Row Drops summary sheet (signed drop + slope only)
+                if not row_drop_summary_df.empty:
+                    # Round for summary
+                    summary_df_out = row_drop_summary_df.copy()
+                    for col in summary_df_out.columns:
+                        if summary_df_out[col].dtype in [float, int]:
+                            summary_df_out[col] = summary_df_out[col].round(4) if 'Slope' in col else summary_df_out[col].round(2)
+                    summary_df_out.to_excel(writer, sheet_name='Row Drops', index=False)
+            output.seek(0)
+
+            st.download_button(
+                label="📥 Download Excel Results",
+                data=output,
+                file_name="optimization_results_comparison.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col2:
+            # Cut/Fill CSV - Available for both N-S constrained and unconstrained
+            point_number_col = 'Point Number' if 'Point Number' in final_results_df.columns else 'Pile'
+            
+            if apply_ns_constraints and 'Ground Adj (N-S Constrained)' in final_results_df.columns:
+                # N-S Constrained version
+                cut_fill_df = pd.DataFrame({
+                    'Point number': final_results_df[point_number_col],
+                    'Northing': final_results_df['Northing'].round(2),
+                    'Easting': final_results_df['Easting'].round(2),
+                    'Ground Adj (N-S Constrained)': final_results_df['Ground Adj (N-S Constrained)'].round(2),
+                    'Grading Direction (N-S Constrained)': final_results_df['Grading Direction (N-S Constrained)']
+                })
+            else:
+                # Best Method version (when N-S unchecked)
+                # Add grading direction for best method
+                grading_direction = np.select(
+                    [export_df['Best_Ground_Adj'] > 0.001, export_df['Best_Ground_Adj'] < -0.001],
+                    ['Fill', 'Cut'],
+                    default='None'
+                )
+                
+                cut_fill_df = pd.DataFrame({
+                    'Point number': export_df[point_number_col],
+                    'Northing': export_df['Northing'].round(2),
+                    'Easting': export_df['Easting'].round(2),
+                    'Best_Method': export_df['Best_Method'],
+                    'Ground Adj (Best Method)': export_df['Best_Ground_Adj'].round(2),
+                    'Grading Direction (Best Method)': grading_direction
+                })
+
+            st.download_button(
+                label="📥 Download Cut_Fill.csv",
+                data=cut_fill_df.to_csv(index=False),
+                file_name="Cut_Fill.csv",
+                mime="text/csv"
+            )
+
+        with col3:
+            # FG Surface CSV - Available for both N-S constrained and unconstrained
+            point_number_col = 'Point Number' if 'Point Number' in final_results_df.columns else 'Pile'
+            
+            if apply_ns_constraints and 'Finished Ground (N-S Constrained)' in final_results_df.columns:
+                # N-S Constrained version
+                fg_surface_df = pd.DataFrame({
+                    'Point Number': final_results_df[point_number_col],
+                    'Northing': final_results_df['Northing'].round(2),
+                    'Easting': final_results_df['Easting'].round(2),
+                    'Finished Ground (N-S Constrained)': final_results_df['Finished Ground (N-S Constrained)'].round(2),
+                    'Grading Direction (N-S Constrained)': final_results_df['Grading Direction (N-S Constrained)']
+                })
+            else:
+                # Best Method version (when N-S unchecked)
+                grading_direction = np.select(
+                    [export_df['Best_Ground_Adj'] > 0.001, export_df['Best_Ground_Adj'] < -0.001],
+                    ['Fill', 'Cut'],
+                    default='None'
+                )
+                
+                fg_surface_df = pd.DataFrame({
+                    'Point Number': export_df[point_number_col],
+                    'Northing': export_df['Northing'].round(2),
+                    'Easting': export_df['Easting'].round(2),
+                    'Best_Method': export_df['Best_Method'],
+                    'Finished Ground (Best Method)': export_df['Best_Finished_Ground'].round(2),
+                    'Grading Direction (Best Method)': grading_direction
+                })
+
+            st.download_button(
+                label="📥 Download FG_Surface.csv",
+                data=fg_surface_df.to_csv(index=False),
+                file_name="FG_Surface.csv",
+                mime="text/csv"
+            )
 
 else:
     st.info("👈 Please upload an Excel file to begin the analysis")
