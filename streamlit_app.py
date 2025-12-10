@@ -16,9 +16,9 @@ st.set_page_config(
     page_icon="☀️",
     layout="wide"
 )
-
+version="1.5"
 # Title and description
-st.title("☀️ Solar Pile Optimization Analysis V1.3")
+st.title(f"☀️ Solar Pile Optimization Analysis V{version}")
 st.markdown("""
 This application analyzes solar array pile data to determine the optimal racking line 
 and calculate required pile lengths. It compares three optimization methods and applies 
@@ -1307,4 +1307,4 @@ else:
 
 # Footer
 st.markdown("---")
-st.markdown("*Solar Pile Optimization Analysis Tool - Version 1.2*")
+st.markdown(f"*Solar Pile Optimization Analysis Tool - Version {version}*")
