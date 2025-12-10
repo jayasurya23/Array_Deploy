@@ -71,7 +71,8 @@ def load_data_from_excel(file, sheet_name='Array Pile Data'):
         st.error(f"Error reading Excel file: {e}")
         return None
 
-def read_array_pile_first_12(file, sheet='Array Pile Data', header_row=1):
+@st.cache_data
+def read_array_pile_first_12(file_bytes, sheet='Array Pile Data', header_row=1):
     """Read the first 12 columns from Array Pile Data with adaptive header handling."""
     attempted_headers = [header_row]
     if header_row != 0:
@@ -80,7 +81,7 @@ def read_array_pile_first_12(file, sheet='Array Pile Data', header_row=1):
     last_error = None
     for hdr in attempted_headers:
         try:
-            apd = pd.read_excel(file, sheet_name=sheet, header=hdr, usecols=range(12))
+            apd = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet, header=hdr, usecols=range(12))
 
             # If we already have expected names, keep them; else rename Unnamed columns
             rename_map = {
@@ -536,7 +537,7 @@ if uploaded_file is not None:
 
     # Load data using the adaptive 12-column reader
     with st.spinner("Loading data..."):
-        raw_data = read_array_pile_first_12(uploaded_file, sheet=sheet_name, header_row=header_row_index)
+        raw_data = read_array_pile_first_12(uploaded_file.getvalue(), sheet=sheet_name, header_row=header_row_index)
 
     # Diagnostics: show columns preview even if Row missing
     if raw_data is not None:
