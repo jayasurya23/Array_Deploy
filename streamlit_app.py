@@ -12,13 +12,13 @@ except Exception:  # plotly not installed
 
 # Set page configuration
 st.set_page_config(
-    page_title="Solar Pile Optimization Analysis V1.2",
+    page_title="Solar Pile Optimization Analysis",
     page_icon="☀️",
     layout="wide"
 )
 
 # Title and description
-st.title("☀️ Solar Pile Optimization Analysis")
+st.title("☀️ Solar Pile Optimization Analysis V1.3")
 st.markdown("""
 This application analyzes solar array pile data to determine the optimal racking line 
 and calculate required pile lengths. It compares three optimization methods and applies 
