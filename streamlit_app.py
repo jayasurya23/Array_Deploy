@@ -16,7 +16,7 @@ st.set_page_config(
     page_icon="☀️",
     layout="wide"
 )
-version="2.0"
+version="2.1"
 # Title and description
 st.title(f"☀️ Solar Pile Optimization Analysis V{version}")
 st.markdown("""
@@ -859,7 +859,7 @@ if uploaded_file is not None:
                                 new_south_top = north_post_of_south_row['EG'] + target_reveal
                                 adjustment_made = True
 
-                            elif 20 <= northing_diff < 60:
+                            elif 20 <= northing_diff < 60:  # 20 and 60 make variable inputs
                                 top_n = south_post_of_north_row['Top of Pile (N-S Constrained)']
                                 top_s = north_post_of_south_row['Top of Pile (N-S Constrained)']
                                 reveal_n = top_n - south_post_of_north_row['EG']
@@ -875,7 +875,7 @@ if uploaded_file is not None:
                                 if not (min_reveal_height <= reveal_s <= max_reveal_height):
                                     new_top_s_tentative = north_post_of_south_row['EG'] + ideal_reveal
 
-                                if abs(new_top_n_tentative - new_top_s_tentative) > 2.0:
+                                if abs(new_top_n_tentative - new_top_s_tentative) > 2.0:   #make variable input
                                     new_north_top = new_top_n_tentative
                                     new_south_top = new_top_s_tentative
                                 else:
@@ -1209,6 +1209,59 @@ if uploaded_file is not None:
                             export_df.loc[grp.index, 'Best_Finished_Ground'] = grp[best_fg_col].values
             # ================= End Best Method & All Columns =================
 
+            # ================= Row Summary Sheet =================
+            # Row number, number of piles, 1st pile top elevation, last pile top elevation, best method name.
+            # Best method name must reflect whether N-S constraints were applied.
+            row_summary_records = []
+
+            # When N-S constraints are enabled, the "best" method for reporting is the constrained result.
+            ns_best_method_name = None
+            if apply_ns_constraints and 'Top of Pile (N-S Constrained)' in export_df.columns:
+                ns_best_method_name = 'N-S Constrained'
+
+            for row_name, grp in export_df.groupby('Row'):
+                # Determine ordering along the row for first/last pile
+                if {'Easting', 'Northing'}.issubset(grp.columns) and len(grp) > 1:  
+                    coords = grp[['Easting', 'Northing']].values
+                    dists = np.insert(np.cumsum(np.sqrt(np.sum(np.diff(coords, axis=0)**2, axis=1))), 0, 0)
+                    order_idx = np.argsort(dists)
+                    ordered_index = grp.index[order_idx]
+                else:
+                    ordered_index = grp.index
+
+                num_piles = grp['Pile'].nunique() if 'Pile' in grp.columns else len(grp)
+
+                if ns_best_method_name is not None:
+                    best_method_name = ns_best_method_name
+                else:
+                    # Fall back to per-row best method (computed above when N-S is unchecked)
+                    best_method_name = ''
+                    if 'Best_Method' in grp.columns:
+                        bm = grp['Best_Method'].iloc[0]
+                        if isinstance(bm, str) and bm.strip():
+                            best_method_name = bm.strip()
+
+                top_col = f'Top of Pile ({best_method_name})' if best_method_name else None
+
+                first_top = np.nan
+                last_top = np.nan
+                if top_col and top_col in grp.columns and len(ordered_index) > 0:
+                    first_top = grp.loc[ordered_index[0], top_col]
+                    last_top = grp.loc[ordered_index[-1], top_col]
+
+                row_summary_records.append({
+                    'Row': row_name,
+                    'Number of Piles': int(num_piles) if pd.notna(num_piles) else num_piles,
+                    '1st Pile Top of Elevation': first_top,
+                    'Last Pile Top of Elevation': last_top,
+                    'Best Method': best_method_name
+                })
+
+            row_summary_df = pd.DataFrame(row_summary_records).sort_values('Row') if row_summary_records else pd.DataFrame(
+                columns=['Row', 'Number of Piles', '1st Pile Top of Elevation', 'Last Pile Top of Elevation', 'Best Method']
+            )
+            # ================= End Row Summary Sheet =================
+
             # Round numerical columns
             numerical_cols = [col for col in export_df.columns 
                              if export_df[col].dtype in ['float64', 'int64'] and col not in ['Pile', 'Point Number']]
@@ -1220,6 +1273,15 @@ if uploaded_file is not None:
                     if export_df[col].dtype in [float, int]:
                         export_df[col] = export_df[col].round(4) if 'Slope' in col else export_df[col].round(2)
                 export_df.to_excel(writer, sheet_name='Optimization Results', index=False)
+
+                # Row Summary sheet
+                if not row_summary_df.empty:
+                    rs_out = row_summary_df.copy()
+                    for col in ['1st Pile Top of Elevation', 'Last Pile Top of Elevation']:
+                        if col in rs_out.columns:
+                            rs_out[col] = pd.to_numeric(rs_out[col], errors='coerce').round(2)
+                    rs_out.to_excel(writer, sheet_name='Row Summary', index=False)
+
                 # Row Drops summary sheet (signed drop + slope only)
                 if not row_drop_summary_df.empty:
                     # Round for summary
