@@ -44,6 +44,31 @@ header_row_index = st.sidebar.number_input(
 # Configuration parameters
 st.sidebar.subheader("Optimization Parameters")
 apply_ns_constraints = st.sidebar.checkbox("Apply North-South Constraints", value=True)
+
+# N-S constraint tuning (used only when Apply North-South Constraints is enabled)
+st.sidebar.subheader("North-South Constraint Parameters")
+ns_northing_diff_min_ft = st.sidebar.number_input(
+    "N-S constraint: Northing diff minimum (ft)",
+    value=20.0,
+    min_value=0.0,
+    help="If the northing difference between adjacent rows is below this, the close-spacing constraint logic is applied. Default = 20 ft."
+)
+ns_northing_diff_max_ft = st.sidebar.number_input(
+    "N-S constraint: Northing diff maximum (ft)",
+    value=60.0,
+    min_value=0.0,
+    help="If the northing difference is between the minimum and this maximum, the mid-spacing constraint logic is applied. Default = 60 ft."
+)
+ns_top_of_pile_tolerance_ft = st.sidebar.number_input(
+    "N-S constraint: Top-of-pile vertical tolerance (ft)",
+    value=2.0,
+    min_value=0.0,
+    help="Vertical tolerance used when comparing/adjusting adjacent-row top-of-pile elevations in the mid-spacing constraint logic. Default = 2.0 ft."
+)
+
+# Guardrail: ensure max >= min
+if ns_northing_diff_max_ft < ns_northing_diff_min_ft:
+    ns_northing_diff_max_ft = ns_northing_diff_min_ft
 grading_width_ft = st.sidebar.number_input("Grading Width (ft)", value=1.0, min_value=0.1)
 min_reveal_height = st.sidebar.number_input("Min Reveal Height (ft)", value=4.0, min_value=0.0)
 max_reveal_height = st.sidebar.number_input("Max Reveal Height (ft)", value=5.0, min_value=0.0)
@@ -849,7 +874,7 @@ if uploaded_file is not None:
                             adjustment_made = False
                             new_north_top, new_south_top = None, None
 
-                            if northing_diff < 20:
+                            if northing_diff < ns_northing_diff_min_ft:
                                 reveal_north = south_post_of_north_row['Top of Pile (N-S Constrained)'] - south_post_of_north_row['EG']
                                 reveal_south = north_post_of_south_row['Top of Pile (N-S Constrained)'] - north_post_of_south_row['EG']
                                 avg_reveal = (reveal_north + reveal_south) / 2
@@ -859,7 +884,7 @@ if uploaded_file is not None:
                                 new_south_top = north_post_of_south_row['EG'] + target_reveal
                                 adjustment_made = True
 
-                            elif 20 <= northing_diff < 60:  # 20 and 60 make variable inputs
+                            elif ns_northing_diff_min_ft <= northing_diff < ns_northing_diff_max_ft:
                                 top_n = south_post_of_north_row['Top of Pile (N-S Constrained)']
                                 top_s = north_post_of_south_row['Top of Pile (N-S Constrained)']
                                 reveal_n = top_n - south_post_of_north_row['EG']
@@ -875,14 +900,14 @@ if uploaded_file is not None:
                                 if not (min_reveal_height <= reveal_s <= max_reveal_height):
                                     new_top_s_tentative = north_post_of_south_row['EG'] + ideal_reveal
 
-                                if abs(new_top_n_tentative - new_top_s_tentative) > 2.0:   #make variable input
+                                if abs(new_top_n_tentative - new_top_s_tentative) > ns_top_of_pile_tolerance_ft:
                                     new_north_top = new_top_n_tentative
                                     new_south_top = new_top_s_tentative
                                 else:
-                                    if (top_n - top_s) > 2.0:
-                                        new_north_top = top_s + 2.0
-                                    elif (top_s - top_n) > 2.0:
-                                        new_south_top = top_n + 2.0
+                                    if (top_n - top_s) > ns_top_of_pile_tolerance_ft:
+                                        new_north_top = top_s + ns_top_of_pile_tolerance_ft
+                                    elif (top_s - top_n) > ns_top_of_pile_tolerance_ft:
+                                        new_south_top = top_n + ns_top_of_pile_tolerance_ft
 
                                 if (new_north_top is not None and not np.isclose(new_north_top, top_n)) or                                    (new_south_top is not None and not np.isclose(new_south_top, top_s)):
                                     adjustment_made = True
