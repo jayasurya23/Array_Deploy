@@ -16,7 +16,7 @@ st.set_page_config(
     page_icon="☀️",
     layout="wide"
 )
-version="2.1"
+version="2.2"
 # Title and description
 st.title(f"☀️ Solar Pile Optimization Analysis V {version}")
 st.markdown("""
