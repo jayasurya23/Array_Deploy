@@ -16,13 +16,14 @@ st.set_page_config(
     page_icon="☀️",
     layout="wide"
 )
-version="2.2"
+version="2.3"
 # Title and description
 st.title(f"☀️ Solar Pile Optimization Analysis V {version}")
 st.markdown("""
 This application analyzes solar array pile data to determine the optimal racking line 
 and calculate required pile lengths. It compares three optimization methods and applies 
 North-South constraints between adjacent rows.
+            Added N-S constraint logic to better handle closely spaced rows.
 """)
 
 # Sidebar for configuration
@@ -64,6 +65,12 @@ ns_top_of_pile_tolerance_ft = st.sidebar.number_input(
     value=2.0,
     min_value=0.0,
     help="Vertical tolerance used when comparing/adjusting adjacent-row top-of-pile elevations in the mid-spacing constraint logic. Default = 2.0 ft."
+)
+ns_top_of_pile_tolerance_close_ft = st.sidebar.number_input(
+    "N_S Close Spaced Tolerance",
+    value=0.1,
+    min_value=0.0,
+    help="Vertical tolerance used when adjacent rows are closer than the minimum northing difference (close-spacing constraint). Default = 0.1 ft."
 )
 
 # Guardrail: ensure max >= min
@@ -875,14 +882,45 @@ if uploaded_file is not None:
                             new_north_top, new_south_top = None, None
 
                             if northing_diff < ns_northing_diff_min_ft:
-                                reveal_north = south_post_of_north_row['Top of Pile (N-S Constrained)'] - south_post_of_north_row['EG']
-                                reveal_south = north_post_of_south_row['Top of Pile (N-S Constrained)'] - north_post_of_south_row['EG']
+                                top_n = south_post_of_north_row['Top of Pile (N-S Constrained)']
+                                top_s = north_post_of_south_row['Top of Pile (N-S Constrained)']
+
+                                reveal_north = top_n - south_post_of_north_row['EG']
+                                reveal_south = top_s - north_post_of_south_row['EG']
                                 avg_reveal = (reveal_north + reveal_south) / 2
                                 target_reveal = np.clip(avg_reveal, min_reveal_height, max_reveal_height)
 
-                                new_north_top = south_post_of_north_row['EG'] + target_reveal
-                                new_south_top = north_post_of_south_row['EG'] + target_reveal
-                                adjustment_made = True
+                                # Start by targeting equal reveal on both facing posts.
+                                eg_n = south_post_of_north_row['EG']
+                                eg_s = north_post_of_south_row['EG']
+
+                                new_north_top = eg_n + target_reveal
+                                new_south_top = eg_s + target_reveal
+
+                                # If requested, apply a tighter close-spaced top-of-pile tolerance.
+                                tol_close = ns_top_of_pile_tolerance_close_ft
+                                if tol_close is not None and tol_close >= 0.0 and abs(new_north_top - new_south_top) > tol_close:
+                                    # Try to bring both tops near a common elevation while respecting reveal limits.
+                                    avg_top = (new_north_top + new_south_top) / 2
+
+                                    n_min = eg_n + min_reveal_height
+                                    n_max = eg_n + max_reveal_height
+                                    s_min = eg_s + min_reveal_height
+                                    s_max = eg_s + max_reveal_height
+
+                                    new_north_top = float(np.clip(avg_top, n_min, n_max))
+                                    new_south_top = float(np.clip(avg_top, s_min, s_max))
+
+                                    # Second pass: if still out of tolerance (due to clipping), compress the gap.
+                                    if abs(new_north_top - new_south_top) > tol_close:
+                                        if new_north_top > new_south_top:
+                                            new_north_top = float(np.clip(new_south_top + tol_close, n_min, n_max))
+                                        else:
+                                            new_south_top = float(np.clip(new_north_top + tol_close, s_min, s_max))
+
+                                # Mark adjustment only if we actually changed something.
+                                if (not np.isclose(new_north_top, top_n)) or (not np.isclose(new_south_top, top_s)):
+                                    adjustment_made = True
 
                             elif ns_northing_diff_min_ft <= northing_diff < ns_northing_diff_max_ft:
                                 top_n = south_post_of_north_row['Top of Pile (N-S Constrained)']
