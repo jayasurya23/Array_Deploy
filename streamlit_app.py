@@ -16,14 +16,13 @@ st.set_page_config(
     page_icon="☀️",
     layout="wide"
 )
-version="2.3"
+version="2.2"
 # Title and description
 st.title(f"☀️ Solar Pile Optimization Analysis V {version}")
 st.markdown("""
 This application analyzes solar array pile data to determine the optimal racking line 
 and calculate required pile lengths. It compares three optimization methods and applies 
 North-South constraints between adjacent rows.
-            Added N-S constraint logic to better handle closely spaced rows.
 """)
 
 # Sidebar for configuration
@@ -67,7 +66,7 @@ ns_top_of_pile_tolerance_ft = st.sidebar.number_input(
     help="Vertical tolerance used when comparing/adjusting adjacent-row top-of-pile elevations in the mid-spacing constraint logic. Default = 2.0 ft."
 )
 ns_top_of_pile_tolerance_close_ft = st.sidebar.number_input(
-    "N_S Close Spaced Tolerance",
+    "N-S constraint: Close Spaced Top-of-pile vertical tolerance (ft)",
     value=0.1,
     min_value=0.0,
     help="Vertical tolerance used when adjacent rows are closer than the minimum northing difference (close-spacing constraint). Default = 0.1 ft."
